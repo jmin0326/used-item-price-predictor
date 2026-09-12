@@ -249,7 +249,50 @@ function predictViews(model, input, listPrice, marketPrice) {
 }
 
 /* =========================================================================
-   4. UI 헬퍼
+   4. 자료구조: 해시맵 기반 역색인 (Inverted Index)
+   - 토큰(부분문자열) → 상품 id 집합 을 해시맵에 미리 저장해두고,
+     검색할 때 문자열 전체를 훑지 않고 해시 조회 한 번으로 후보를 얻는다.
+   - 매 검색마다 전체를 훑는 선형탐색 O(N×L) 대신, 평균 O(1) 조회로 처리.
+   ========================================================================= */
+function buildSearchIndex(items) {
+  const index = new Map(); // token -> Set<id>
+  const byId = new Map();  // id -> item (O(1) 역참조)
+
+  for (const item of items) {
+    byId.set(item.id, item);
+    const tokens = new Set();
+    for (const field of [item.title, item.sub, item.categoryLabel]) {
+      for (const word of String(field).split(/[\s/]+/).filter(Boolean)) {
+        // 한글 부분검색을 위해 모든 연속 부분문자열을 토큰으로 등록
+        for (let i = 0; i < word.length; i++) {
+          for (let j = i + 1; j <= word.length; j++) tokens.add(word.slice(i, j));
+        }
+      }
+    }
+    for (const t of tokens) {
+      if (!index.has(t)) index.set(t, new Set());
+      index.get(t).add(item.id);
+    }
+  }
+  return { index, byId, tokenCount: index.size };
+}
+
+// 여러 단어는 AND(교집합)으로 처리. 결과가 null이면 "검색어 없음(전체)"
+function searchIndex(idx, query) {
+  const q = query.trim();
+  if (!q) return null;
+  let result = null;
+  for (const term of q.split(/\s+/).filter(Boolean)) {
+    const hit = idx.index.get(term) || new Set();
+    if (result === null) result = new Set(hit);
+    else result = new Set([...result].filter((id) => hit.has(id)));
+    if (result.size === 0) break;
+  }
+  return result;
+}
+
+/* =========================================================================
+   5. UI 헬퍼
    ========================================================================= */
 const won = (n) => `${Math.round(n).toLocaleString("ko-KR")}원`;
 const manwon = (n) => (n >= 10000 ? `${Math.round(n / 10000).toLocaleString("ko-KR")}만` : `${n}`);
@@ -258,10 +301,10 @@ const manwon = (n) => (n >= 10000 ? `${Math.round(n / 10000).toLocaleString("ko-
    5. 메인 컴포넌트
    ========================================================================= */
 export default function UsedMarketPredictor() {
-  const { dataset, model } = useMemo(() => {
+  const { dataset, model, searchIdx } = useMemo(() => {
     const rng = mulberry32(20260902);
     const ds = generateDataset(rng, 22);
-    return { dataset: ds, model: trainModels(ds) };
+    return { dataset: ds, model: trainModels(ds), searchIdx: buildSearchIndex(ds) };
   }, []);
 
   // ---- 감정 입력 상태 ----
@@ -332,21 +375,22 @@ export default function UsedMarketPredictor() {
   const [visible, setVisible] = useState(12);
 
   const filtered = useMemo(() => {
-    const q = search.trim();
-    let list = dataset.filter((item) => {
-      if (filterCat !== "all" && item.category !== filterCat) return false;
-      if (q) {
-        const hay = `${item.title} ${item.sub} ${item.categoryLabel}`;
-        if (!hay.includes(q)) return false;
-      }
-      return true;
-    });
-    if (sortBy === "views") list = [...list].sort((a, b) => b.views - a.views);
-    else if (sortBy === "recent") list = [...list].sort((a, b) => a.usageDays - b.usageDays);
-    else if (sortBy === "priceLow") list = [...list].sort((a, b) => a.soldPrice - b.soldPrice);
-    else if (sortBy === "priceHigh") list = [...list].sort((a, b) => b.soldPrice - a.soldPrice);
-    return list;
-  }, [dataset, search, filterCat, sortBy]);
+    // 1) 역색인 해시 조회로 후보 id 집합을 얻는다 (문자열 전체를 훑지 않음)
+    const hitIds = searchIndex(searchIdx, search);
+    // 2) 후보 id를 byId 해시맵으로 O(1) 역참조 → 카테고리 필터 적용
+    let list =
+      hitIds === null
+        ? dataset
+        : [...hitIds].map((id) => searchIdx.byId.get(id)).filter(Boolean);
+    if (filterCat !== "all") list = list.filter((item) => item.category === filterCat);
+
+    const sorted = [...list];
+    if (sortBy === "views") sorted.sort((a, b) => b.views - a.views);
+    else if (sortBy === "recent") sorted.sort((a, b) => a.usageDays - b.usageDays);
+    else if (sortBy === "priceLow") sorted.sort((a, b) => a.soldPrice - b.soldPrice);
+    else if (sortBy === "priceHigh") sorted.sort((a, b) => b.soldPrice - a.soldPrice);
+    return sorted;
+  }, [dataset, searchIdx, search, filterCat, sortBy]);
 
   const shown = filtered.slice(0, visible);
 
@@ -567,6 +611,9 @@ export default function UsedMarketPredictor() {
             paddingBottom: 8, marginBottom: 16 }}>
             <h2 style={{ fontSize: 17, fontWeight: 700, margin: 0 }}>판매완료 상품 둘러보기</h2>
             <span className="mono" style={{ fontSize: 12, color: "var(--ink-soft)" }}>{filtered.length}건</span>
+            <span className="mono" style={{ fontSize: 11, color: "var(--gold)", marginLeft: "auto" }}>
+              역색인 토큰 {searchIdx.tokenCount.toLocaleString("ko-KR")}개
+            </span>
           </div>
 
           {/* 검색 + 정렬 */}
