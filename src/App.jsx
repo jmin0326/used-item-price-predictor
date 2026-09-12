@@ -26,25 +26,25 @@ import {
    1. 도메인 상수 — 카테고리(대분류 + 소분류)
    ========================================================================= */
 const CATEGORIES = [
-  { key: "digital", label: "디지털/가전", range: [80000, 2500000], decay: 1.05, floor: 0.1, pop: 1.4, elasticity: 7.5,
+  { key: "digital", label: "디지털/가전", range: [80000, 2500000], decay: 1.05, floor: 0.1, pop: 1.4, elasticity: 6.4,
     subs: ["노트북", "휴대폰", "태블릿", "무선이어폰", "모니터", "키보드", "게임기", "스마트워치"] },
-  { key: "fashion", label: "패션의류", range: [15000, 400000], decay: 0.95, floor: 0.12, pop: 1.1, elasticity: 6.5,
+  { key: "fashion", label: "패션의류", range: [15000, 400000], decay: 0.95, floor: 0.12, pop: 1.1, elasticity: 5.4,
     subs: ["코트", "패딩", "니트", "청바지", "원피스", "운동화", "셔츠", "가디건"] },
-  { key: "bag", label: "가방/지갑", range: [20000, 900000], decay: 0.7, floor: 0.25, pop: 1.0, elasticity: 6,
+  { key: "bag", label: "가방/지갑", range: [20000, 900000], decay: 0.7, floor: 0.25, pop: 1.0, elasticity: 5.0,
     subs: ["백팩", "크로스백", "토트백", "지갑", "숄더백"] },
-  { key: "furniture", label: "가구/인테리어", range: [30000, 1500000], decay: 0.45, floor: 0.35, pop: 0.7, elasticity: 4,
+  { key: "furniture", label: "가구/인테리어", range: [30000, 1500000], decay: 0.45, floor: 0.35, pop: 0.7, elasticity: 3.6,
     subs: ["책상", "의자", "소파", "침대프레임", "조명", "수납장"] },
-  { key: "book", label: "도서", range: [5000, 70000], decay: 0.35, floor: 0.3, pop: 0.8, elasticity: 3.5,
+  { key: "book", label: "도서", range: [5000, 70000], decay: 0.35, floor: 0.3, pop: 0.8, elasticity: 3.4,
     subs: ["소설", "전공서적", "만화책", "자기계발서", "에세이"] },
-  { key: "baby", label: "유아동", range: [10000, 600000], decay: 0.6, floor: 0.2, pop: 0.9, elasticity: 6.5,
+  { key: "baby", label: "유아동", range: [10000, 600000], decay: 0.6, floor: 0.2, pop: 0.9, elasticity: 5.4,
     subs: ["유모차", "아기침대", "장난감", "유아복", "카시트"] },
-  { key: "sports", label: "스포츠/레저", range: [20000, 1200000], decay: 0.6, floor: 0.25, pop: 0.85, elasticity: 5.5,
+  { key: "sports", label: "스포츠/레저", range: [20000, 1200000], decay: 0.6, floor: 0.25, pop: 0.85, elasticity: 4.6,
     subs: ["자전거", "텐트", "골프채", "요가매트", "킥보드", "등산화"] },
-  { key: "beauty", label: "뷰티/미용", range: [10000, 300000], decay: 0.9, floor: 0.15, pop: 0.9, elasticity: 6.5,
+  { key: "beauty", label: "뷰티/미용", range: [10000, 300000], decay: 0.9, floor: 0.15, pop: 0.9, elasticity: 5.4,
     subs: ["고데기", "드라이어", "마사지기", "전동칫솔"] },
-  { key: "life", label: "생활/주방", range: [10000, 700000], decay: 0.7, floor: 0.2, pop: 0.95, elasticity: 5.5,
+  { key: "life", label: "생활/주방", range: [10000, 700000], decay: 0.7, floor: 0.2, pop: 0.95, elasticity: 4.6,
     subs: ["전기포트", "밥솥", "청소기", "에어프라이어", "커피머신"] },
-  { key: "pet", label: "반려동물", range: [10000, 400000], decay: 0.65, floor: 0.2, pop: 0.8, elasticity: 5,
+  { key: "pet", label: "반려동물", range: [10000, 400000], decay: 0.65, floor: 0.2, pop: 0.8, elasticity: 4.2,
     subs: ["캣타워", "강아지집", "자동급식기", "펫유모차"] },
 ];
 const REFERENCE_CATEGORY = CATEGORIES[CATEGORIES.length - 1].key;
@@ -112,26 +112,33 @@ function generateDataset(rng, nPerCategory) {
       const sub = cat.subs[Math.floor(rng() * cat.subs.length)];
       const brand = BRAND_WORDS[Math.floor(rng() * BRAND_WORDS.length)];
 
-      // 판매가(정가 대비 감가) 규칙
-      let ratio = cat.floor + (1 - cat.floor) * Math.exp((-cat.decay * usageMonths) / 12);
-      ratio *= 0.72 + 0.056 * conditionScore;
-      ratio *= 1 - 0.028 * defectLevel;
-      ratio *= hasAccessories ? 1.04 : 1;
-      ratio *= 1 + gaussian(rng) * 0.05;
-      ratio = Math.min(Math.max(ratio, 0.05), 1.05);
-      const soldPrice = Math.round((originalPrice * ratio) / 100) * 100;
+      // 이론 시세(fair price): 노이즈 없는 그 물건의 객관적 가치
+      let fair = cat.floor + (1 - cat.floor) * Math.exp((-cat.decay * usageMonths) / 12);
+      fair *= 0.72 + 0.056 * conditionScore;
+      fair *= 1 - 0.028 * defectLevel;
+      fair *= hasAccessories ? 1.04 : 1;
+      fair = Math.min(Math.max(fair, 0.05), 1.0);
+      const fairPrice = originalPrice * fair;
 
-      // 조회수 규칙: 시세 대비 비싸게 내놨을수록 조회수 ↓ (카테고리마다 가격 민감도가 다름)
-      const typical = cat.floor + (1 - cat.floor) * 0.45;
-      const pressure = soldPrice / originalPrice - typical;
+      // 실제 판매가는 시세 주변에서 흔들림 (판매자마다 더 받기도, 급처하기도)
+      const soldPrice =
+        Math.round(
+          Math.min(
+            Math.max(fairPrice * (1 + gaussian(rng) * 0.12), originalPrice * 0.03),
+            originalPrice * 1.05
+          ) / 100
+        ) * 100;
+
+      // 조회수 규칙: "시세 대비 얼마나 비싸게 불렀나(premium)"에 반응. 카테고리마다 민감도가 다름
+      const premium = soldPrice / fairPrice;
       let views =
-        cat.pop * 90 *
-        Math.exp(-cat.elasticity * pressure) *
+        cat.pop * 110 *
+        Math.exp(-cat.elasticity * (premium - 1)) *
         (0.6 + 0.09 * conditionScore) *
         (hasAccessories ? 1.1 : 1) *
         (1 - 0.02 * defectLevel) *
         Math.exp(-usageMonths / 40);
-      views *= Math.exp(gaussian(rng) * 0.28);
+      views *= Math.exp(gaussian(rng) * 0.2);
       views = Math.max(1, Math.round(views));
 
       rows.push({
@@ -178,52 +185,66 @@ function r2score(actual, pred) {
   return 1 - ssRes / ssTot;
 }
 
-function priceFeatureRow(r, stats) {
-  const zPrice = (r.originalPrice - stats.originalPrice.mean) / stats.originalPrice.std;
+// ★ 감가율(판매가/정가)을 예측한다. 원 단위 대신 비율을 맞춰야
+//    5천원짜리 책과 250만원짜리 노트북을 하나의 식으로 다룰 수 있다.
+function ratioFeatureRow(r, stats) {
   const zMonths = (r.usageMonths - stats.usageMonths.mean) / stats.usageMonths.std;
   const zCond = (r.conditionScore - stats.conditionScore.mean) / stats.conditionScore.std;
+  const zLogPrice = (Math.log(r.originalPrice) - stats.logPrice.mean) / stats.logPrice.std;
+  const years = r.usageMonths / 12;
+  const decayFast = Math.exp(-years);        // 비선형 감가항 (초기 급락)
+  const decaySlow = Math.exp(-0.4 * years);  // 비선형 감가항 (완만한 감가)
   const dummies = DUMMY_CATEGORIES.map((c) => (r.category === c.key ? 1 : 0));
-  const interactions = DUMMY_CATEGORIES.map((c) => (r.category === c.key ? zMonths : 0));
-  return [1, zPrice, zMonths, zCond, r.defectLevel / 10, r.hasAccessories, ...dummies, ...interactions];
-}
-function viewsFeatureRow(r, stats, listPrice) {
-  const zPrice = (r.originalPrice - stats.originalPrice.mean) / stats.originalPrice.std;
-  const zMonths = (r.usageMonths - stats.usageMonths.mean) / stats.usageMonths.std;
-  const zCond = (r.conditionScore - stats.conditionScore.mean) / stats.conditionScore.std;
-  const ratio = listPrice / r.originalPrice;
-  const dummies = DUMMY_CATEGORIES.map((c) => (r.category === c.key ? 1 : 0));
-  // 카테고리 x 가격비율 상호작용: 카테고리마다 가격에 반응하는 정도(탄력성)가 다르다는 걸 반영
-  const interactions = DUMMY_CATEGORIES.map((c) => (r.category === c.key ? ratio : 0));
-  return [1, zPrice, ratio, zMonths, zCond, r.defectLevel / 10, r.hasAccessories, ...dummies, ...interactions];
+  const interMonths = DUMMY_CATEGORIES.map((c) => (r.category === c.key ? zMonths : 0));
+  const interFast = DUMMY_CATEGORIES.map((c) => (r.category === c.key ? decayFast : 0));
+  const interSlow = DUMMY_CATEGORIES.map((c) => (r.category === c.key ? decaySlow : 0));
+  return [1, zMonths, zCond, decayFast, decaySlow, r.defectLevel / 10, r.hasAccessories,
+    zLogPrice, ...dummies, ...interMonths, ...interFast, ...interSlow];
 }
 
+// ★ 조회수는 "정가 대비"가 아니라 "시세가 대비 프리미엄"에 반응한다.
+//    premium = 내가 부를 가격 / 이 물건의 시세가
+function viewsFeatureRow(r, stats, listPrice, marketPrice) {
+  const zMonths = (r.usageMonths - stats.usageMonths.mean) / stats.usageMonths.std;
+  const zCond = (r.conditionScore - stats.conditionScore.mean) / stats.conditionScore.std;
+  const premium = listPrice / Math.max(marketPrice, 1);
+  const dummies = DUMMY_CATEGORIES.map((c) => (r.category === c.key ? 1 : 0));
+  return [1, premium, zMonths, zCond, r.defectLevel / 10, r.hasAccessories, ...dummies];
+}
+
+// 2단계 학습: (1) 감가율 모델로 시세가를 구하고 → (2) 그 시세가 기준으로 조회수 모델을 학습
 function trainModels(dataset) {
   const stats = {
-    originalPrice: standardize(dataset.map((r) => r.originalPrice)),
     usageMonths: standardize(dataset.map((r) => r.usageMonths)),
     conditionScore: standardize(dataset.map((r) => r.conditionScore)),
+    logPrice: standardize(dataset.map((r) => Math.log(r.originalPrice))),
   };
 
-  const Xp = dataset.map((r) => priceFeatureRow(r, stats));
-  const yp = dataset.map((r) => r.soldPrice);
-  const betaPrice = ridge(Xp, yp, 40);
-  const priceR2 = r2score(yp, Xp.map((row) => math.dot(row, betaPrice)));
+  // (1) 감가율 회귀
+  const Xr = dataset.map((r) => ratioFeatureRow(r, stats));
+  const yr = dataset.map((r) => r.soldPrice / r.originalPrice);
+  const betaRatio = ridge(Xr, yr, 0.5);
+  const priceR2 = r2score(yr, Xr.map((row) => math.dot(row, betaRatio)));
 
-  const Xv = dataset.map((r) => viewsFeatureRow(r, stats, r.soldPrice));
+  const partial = { stats, betaRatio };
+  const marketPrices = dataset.map((r) => predictPrice(partial, r));
+
+  // (2) 조회수 회귀 (시세가 대비 프리미엄 기준)
+  const Xv = dataset.map((r, i) => viewsFeatureRow(r, stats, r.soldPrice, marketPrices[i]));
   const yv = dataset.map((r) => Math.log(r.views));
-  const betaViews = ridge(Xv, yv, 5);
+  const betaViews = ridge(Xv, yv, 0.3);
   const viewsR2 = r2score(yv, Xv.map((row) => math.dot(row, betaViews)));
 
-  return { stats, betaPrice, betaViews, priceR2, viewsR2, n: dataset.length };
+  return { stats, betaRatio, betaViews, priceR2, viewsR2, n: dataset.length };
 }
 
 function predictPrice(model, input) {
-  const raw = math.dot(priceFeatureRow(input, model.stats), model.betaPrice);
-  const clamped = Math.min(Math.max(raw, input.originalPrice * 0.03), input.originalPrice * 1.05);
-  return Math.round(clamped / 100) * 100;
+  const raw = math.dot(ratioFeatureRow(input, model.stats), model.betaRatio);
+  const ratio = Math.min(Math.max(raw, 0.03), 1.05);
+  return Math.round((input.originalPrice * ratio) / 100) * 100;
 }
-function predictViews(model, input, listPrice) {
-  const logV = math.dot(viewsFeatureRow(input, model.stats, listPrice), model.betaViews);
+function predictViews(model, input, listPrice, marketPrice) {
+  const logV = math.dot(viewsFeatureRow(input, model.stats, listPrice, marketPrice), model.betaViews);
   return Math.max(0, Math.round(Math.exp(logV)));
 }
 
@@ -278,20 +299,21 @@ export default function UsedMarketPredictor() {
     const recommended = predictPrice(model, input);
 
     // 가격 스윕 → 조회수 곡선 + 기대수익(가격x조회수) 최댓값 탐색
-    const lo = Math.max(priceNum * 0.15, recommended * 0.35);
-    const hi = Math.min(priceNum * 1.05, recommended * 1.9);
+    // 범위는 시세가 기준 0.5배 ~ 1.6배 (정가는 넘지 않게)
+    const lo = recommended * 0.5;
+    const hi = Math.min(priceNum * 1.05, recommended * 1.6);
     const steps = 60;
     const curve = [];
     let best = null;
     for (let i = 0; i <= steps; i++) {
       const p = lo + ((hi - lo) * i) / steps;
       const price = Math.round(p / 100) * 100;
-      const views = predictViews(model, input, price);
+      const views = predictViews(model, input, price, recommended);
       const revenue = price * views;
       curve.push({ price, views, revenue });
       if (!best || revenue > best.revenue) best = { price, views, revenue };
     }
-    const recViews = predictViews(model, input, recommended);
+    const recViews = predictViews(model, input, recommended, recommended);
     setResult({
       recommended,
       curve,
@@ -299,6 +321,7 @@ export default function UsedMarketPredictor() {
       ratio: (recommended / priceNum) * 100,
       optimal: best,
       optimalRatio: (best.price / priceNum) * 100,
+      optimalVsMarket: (best.price / recommended - 1) * 100,
     });
   };
 
@@ -491,7 +514,7 @@ export default function UsedMarketPredictor() {
                       {won(result.optimal.price)}
                     </div>
                     <div style={{ fontSize: 11.5, color: "var(--ink-soft)", marginTop: 2, display: "flex", alignItems: "center", gap: 4 }}>
-                      정가 대비 {result.optimalRatio.toFixed(1)}% · <Eye size={12} /> {result.optimal.views}
+                      시세 대비 {result.optimalVsMarket > 0 ? "+" : ""}{result.optimalVsMarket.toFixed(1)}% · <Eye size={12} /> {result.optimal.views}
                     </div>
                   </div>
                 </div>
@@ -508,7 +531,8 @@ export default function UsedMarketPredictor() {
                       </linearGradient>
                     </defs>
                     <CartesianGrid stroke="#DDE0D2" />
-                    <XAxis dataKey="price" tickFormatter={manwon} tick={{ fontSize: 11, fill: "#54604F" }}
+                    <XAxis dataKey="price" type="number" domain={["dataMin", "dataMax"]}
+                      tickFormatter={manwon} tick={{ fontSize: 11, fill: "#54604F" }}
                       stroke="#B9C2AC" />
                     <YAxis tick={{ fontSize: 11, fill: "#54604F" }} stroke="#B9C2AC" width={34}
                       label={{ value: "조회", angle: -90, position: "insideLeft", fontSize: 10, fill: "#54604F" }} />
@@ -517,10 +541,10 @@ export default function UsedMarketPredictor() {
                       labelFormatter={(l) => won(l)}
                       contentStyle={{ fontSize: 12, border: "1px solid var(--line)" }} />
                     <Area type="monotone" dataKey="views" stroke="#A98545" strokeWidth={2} fill="url(#vFill)" />
-                    <ReferenceLine x={result.recommended} stroke="#B5442E" strokeDasharray="4 3"
-                      label={{ value: "시세가", position: "top", fontSize: 10, fill: "#B5442E" }} />
-                    <ReferenceLine x={result.optimal.price} stroke="#6B7A3E" strokeDasharray="2 2"
-                      label={{ value: "최적가", position: "top", fontSize: 10, fill: "#6B7A3E" }} />
+                    <ReferenceLine x={result.recommended} stroke="#B5442E" strokeWidth={1.5} strokeDasharray="4 3"
+                      label={{ value: "시세가", position: "insideTopLeft", fontSize: 10, fill: "#B5442E" }} />
+                    <ReferenceLine x={result.optimal.price} stroke="#6B7A3E" strokeWidth={1.5} strokeDasharray="2 2"
+                      label={{ value: "최적가", position: "insideBottomRight", fontSize: 10, fill: "#6B7A3E" }} />
                     <ReferenceDot x={result.recommended} y={result.recViews} r={4} fill="#B5442E" stroke="none" />
                     <ReferenceDot x={result.optimal.price} y={result.optimal.views} r={4} fill="#6B7A3E" stroke="none" />
                   </AreaChart>
